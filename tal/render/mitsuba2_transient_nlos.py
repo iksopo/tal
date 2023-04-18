@@ -62,7 +62,7 @@ def get_materials():
     }
 
 
-def run_mitsuba(scene_xml_path, exr_path, defines,
+def run_mitsuba(scene_xml_path, mode, exr_path, defines,
                 experiment_name, logfile, args, sensor_index=0):
     import re
     import time
@@ -72,7 +72,7 @@ def run_mitsuba(scene_xml_path, exr_path, defines,
     # execute mitsuba command (sourcing setpath.sh before)
     num_threads = args.threads
     command = ['mitsuba',
-               '-m', 'scalar_rgb_polarized',
+               '-m', mode,
                '-o', exr_path,
                '-s', str(sensor_index),
                '-t', str(num_threads)]
@@ -169,8 +169,14 @@ def read_mitsuba_bitmap(path: str):
     import numpy as np
     return np.array(Bitmap(path), copy=False)
 
+def check_available_mode(mode):
+    available_formats = ['scalar_rgb', 'scalar_rgb_polarized']
+    if mode not in available_formats:
+        raise NotImplementedError(
+            f'Mode {mode} is not implemented. {available_formats} modes are available')
 
-def read_mitsuba_streakbitmap(path: str, exr_format='RGB'):
+
+def read_mitsuba_streakbitmap(path: str, exr_format='scalar_rgb'):
     """
     Reads all the images x-t that compose the streak image.
 
@@ -186,9 +192,7 @@ def read_mitsuba_streakbitmap(path: str, exr_format='RGB'):
     # NOTE(diego): for now this assumes that the EXR that it reads
     # are in RGB format, and returns an image with 3 channels,
     # in the case of polarized light it can return something else
-    if exr_format != 'RGB':
-        raise NotImplementedError(
-            'Formats different from RGB are not implemented')
+    check_available_mode(exr_format)
 
     xtframes = glob.glob(os.path.join(
         glob.escape(path), f'frame_*.exr'))
@@ -203,9 +207,20 @@ def read_mitsuba_streakbitmap(path: str, exr_format='RGB'):
             other = read_mitsuba_bitmap(xtframes[i_xtframe])
             streak_img[i_xtframe] = np.nan_to_num(other, nan=0.)
             pbar.update(1)
-
-    # for now streak_img has dimensions (y, x, time, channels)
-    assert streak_img.shape[-1] == 3, \
-        f'Careful, streak_img has shape {streak_img.shape} (i.e. its probably not RGB as we assume, last dimension should be 3)'
-    # and we want it as (time, x, y)
-    return np.sum(np.transpose(streak_img), axis=0)
+    if exr_format == 'scalar_rgb':
+        # for now streak_img has dimensions (y, x, time, channels)
+        assert streak_img.shape[-1] == 3, \
+            f'Careful, streak_img has shape {streak_img.shape} (i.e. its probably not RGB as we assume, last dimension should be 3)'
+        # and we want it as (time, x, y, c)
+        Hc = np.transpose(streak_img, axis=[2, 1, 0, 3])
+        # and we want it as (time, x, y)
+        H = np.sum(Hc, axis=3)
+    elif exr_format == 'scalar_rgb_polarized':
+        # for now streak_img has dimensions (y, x, time, channels + stokes)
+        assert streak_img.shape[-1] == 16, \
+            f'Careful, streak_img has shape {streak_img.shape} (i.e. its probably not RGB + Stokes as we assume, last dimension should be 16)'
+        # and we want it as (time, x, y, c)
+        Hc = np.transpose(streak_img, axis=[2, 1, 0, 3])
+        # and we want it as (time, x, y)
+        H = np.sum(Hc[:, :, :, 0:3], axis=3)
+    return H, Hc

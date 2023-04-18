@@ -65,6 +65,41 @@ class HFormat(Enum):
             f'Unexpected HFormat {self}'
         return 0
 
+class HcFormat(Enum):
+    """
+    Dimensions specification for impulse response data H.
+
+    UNKNOWN
+        Avoid using this value.
+
+    T_Sx_Sy_C
+        H is a 4D array with dimensions (T, Sx, Sy, C).
+        This includes confocal and non-confocal data.
+
+    T_Lx_Ly_Sx_Sy_C
+        H is a 6D array with dimensions (T, Lx, Ly, Sx, Sy, C).
+
+    T_Si_C
+        H is a 3D array with dimensions (T, Si, C).
+        This includes confocal and non-confocal data.
+
+    T_Si_Li_C
+        H is a 4D array with dimensions (T, Si, Li, C).
+    """
+    UNKNOWN = 0
+    T_Sx_Sy_C = 1  # confocal or not
+    T_Lx_Ly_Sx_Sy_C = 2
+    T_Si_C = 3  # confocal or not
+    T_Li_Si_C = 4
+
+    def time_dim(self) -> int:
+        """ Returns the index of the time (T) dimension. """
+        assert self in [HcFormat.T_Sx_Sy,
+                        HcFormat.T_Lx_Ly_Sx_Sy,
+                        HcFormat.T_Si,
+                        HcFormat.T_Li_Si], \
+            f'Unexpected HFormat {self}'
+        return 0
 
 class GridFormat(Enum):
     """

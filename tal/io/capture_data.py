@@ -7,7 +7,7 @@ import inspect
 from typing import Union, get_type_hints
 from nptyping import NDArray, Shape
 from tal.io.format import convert_dict, detect_dict_format
-from tal.enums import FileFormat, HFormat, GridFormat, VolumeFormat
+from tal.enums import FileFormat, HFormat, HcFormat, GridFormat, VolumeFormat
 
 
 class LazyDataset:
@@ -146,8 +146,11 @@ class NLOSCaptureData:
     #
     Float = np.float32
     TensorTSxSy = NDArray[Shape['T, Sx, Sy'], Float]
+    TensorTSxSyC = NDArray[Shape['T, Sx, Sy, C'], Float]
     TensorTLxLySxSy = NDArray[Shape['T, Lx, Ly, Sx, Sy'], Float]
+    TensorTLxLySxSyC = NDArray[Shape['T, Lx, Ly, Sx, Sy, C'], Float]
     HType = Union[TensorTSxSy, TensorTLxLySxSy]
+    HcType = Union[TensorTSxSyC, TensorTLxLySxSyC]
     MatrixN3 = NDArray[Shape['*, 3'], Float]
     TensorXY3 = NDArray[Shape['X, Y, 3'], Float]
     LaserGridType = Union[MatrixN3, TensorXY3]
@@ -160,8 +163,12 @@ class NLOSCaptureData:
     # Actual capture data (ignore _start and _end)
     #
     _start: None = None  # used in as_dict()
+    # Joint wavelengths H
     H: HType = None
+    # H per channel
+    Hc: HcType = None
     H_format: HFormat = None
+    Hc_format: HcFormat = None
     sensor_xyz: Array3 = None
     sensor_grid_xyz: SensorGridType = None
     sensor_grid_normals: SensorGridType = None

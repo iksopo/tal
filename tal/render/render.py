@@ -4,12 +4,13 @@ import yaml
 import tal
 from tal import __version__ as tal_version
 from tal.io.capture_data import NLOSCaptureData
-from tal.enums import FileFormat, GridFormat, HFormat
+from tal.enums import FileFormat, GridFormat, HFormat, HcFormat
 from tal.util import fdent, write_img, tonemap_ldr
 from tal.render.mitsuba2_transient_nlos import (
     get_material_keys, get_materials,
     read_mitsuba_streakbitmap, read_mitsuba_bitmap,
-    run_mitsuba, mitsuba_set_variant
+    run_mitsuba, mitsuba_set_variant,
+    check_available_mode
 )
 from tal.config import local_file_path
 import datetime
@@ -320,9 +321,10 @@ def render_nlos_scene(config_path, args):
         raise AssertionError(
             f'Invalid YAML format in TAL config file: {exc}') from exc
     scene_config = {**scene_defaults, **scene_config}
-
+    mode = scene_config['mitsuba_variant']
+    check_available_mode(mode)
     if not args.dry_run:
-        mitsuba_set_variant(scene_config['mitsuba_variant'])
+        mitsuba_set_variant(mode)
     steady_xml, nlos_xml = get_scene_xml(
         scene_config, random_seed=args.seed, quiet=args.quiet)
 
@@ -431,7 +433,7 @@ def render_nlos_scene(config_path, args):
                 if args.do_logging and not args.dry_run:
                     logfile = open(os.path.join(
                         log_dir, f'{experiment_name}_{render_name}.log'), 'w')
-                run_mitsuba(steady_scene_xml, exr_path, dict(),
+                run_mitsuba(steady_scene_xml, mode, exr_path, dict(),
                             render_name, logfile, args, sensor_index)
                 if args.do_logging and not args.dry_run:
                     logfile.close()
@@ -439,8 +441,8 @@ def render_nlos_scene(config_path, args):
                     image = read_mitsuba_bitmap(exr_path)
                     image = tonemap_ldr(image)
                     # Polarized case
-                    if image.shape[2] == 16:
-                        #print(image.shape)
+                    if mode == 'scalar_rgb_polarized':
+                        print(image.shape)
                         write_img(f"{png_path}.png", image[:, :, [0,1,2]])
                         write_img(f"{png_path}_alpha.png", image[:, :, [3]])
                         write_img(f"{png_path}_s0.png", image[:, :, [4,5,6]])
@@ -448,8 +450,9 @@ def render_nlos_scene(config_path, args):
                         write_img(f"{png_path}_s2.png", image[:,:,[10,11,12]])
                         write_img(f"{png_path}_s3.png", image[:,:,[13,14,15]])
                     # Normal case
-                    else:
+                    elif mode == 'scalar_rgb':
                         write_img(f"{png_path}.png", image)
+
 
             render_steady('back_view', 0)
             render_steady('front_view', 1)
@@ -474,7 +477,7 @@ def render_nlos_scene(config_path, args):
                 logfile = open(os.path.join(
                     log_dir,
                     f'{experiment_name}_L[{laser_lookat_x}][{laser_lookat_y}].log'), 'w')
-            run_mitsuba(nlos_scene_xml, exr_dir, defines,
+            run_mitsuba(nlos_scene_xml, mode, exr_dir, defines,
                         f'Laser {i + 1} of {len(laser_lookats)}', logfile, args)
             if args.do_logging and not args.dry_run:
                 logfile.close()
@@ -513,10 +516,13 @@ def render_nlos_scene(config_path, args):
             'config': scene_config,
             'args': vars(args),
         }
+
         if scan_type == 'single':
-            capture_data.H = read_mitsuba_streakbitmap(
-                partial_laser_dir(*laser_lookats[0]))
+            print(*laser_lookats[0])
+            capture_data.H, capture_data.Hc = read_mitsuba_streakbitmap(
+                partial_laser_dir(*laser_lookats[0]), exr_format=mode)
             capture_data.H_format = HFormat.T_Sx_Sy
+            capture_data.Hc_format = HcFormat.T_Sx_Sy_C
         elif scan_type == 'exhaustive' or scan_type == 'confocal':
             if scan_type == 'exhaustive':
                 capture_data.H = np.empty(
@@ -524,19 +530,22 @@ def render_nlos_scene(config_path, args):
                      sensor_width, sensor_height),
                     dtype=np.float32)
                 capture_data.H_format = HFormat.T_Lx_Ly_Sx_Sy
+                capture_data.Hc_format = HcFormat.T_Lx_Ly_Sx_Sy_C
             elif scan_type == 'confocal':
                 capture_data.H = np.empty(
                     (num_bins, laser_width, laser_height),
                     dtype=np.float32)
                 capture_data.H_format = HFormat.T_Sx_Sy
+                capture_data.Hc_format = HcFormat.T_Sx_Sy_C
             else:
                 raise AssertionError
 
             for x in range(laser_width):
                 for y in range(laser_height):
-                    capture_data.H[:, x, y, ...] = np.squeeze(
-                        read_mitsuba_streakbitmap(
-                            partial_laser_dir(x + 0.5, y + 0.5)))
+                    partial_H, partial_Hc = read_mitsuba_streakbitmap(
+                            partial_laser_dir(x + 0.5, y + 0.5), exr_format=mode)
+                    capture_data.H[:, x, y, ...] = np.squeeze(partial_H)
+                    capture_data.Hc[:, x, y, ...] = np.squeeze(partial_Hc)
         else:
             raise AssertionError(
                 'Invalid scan_type, must be one of {single|exhaustive|confocal}')
