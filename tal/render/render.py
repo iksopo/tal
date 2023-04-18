@@ -212,7 +212,7 @@ def get_scene_xml(config, random_seed=0, quiet=False):
         for key in material_keys:
             assert key in g('material'), \
                 f'Material {material_id} for geometry {name} must have a value for {key}'
-            shape_material.replace(f'${key}', g('material')[key])
+            shape_material = shape_material.replace(f'${key}', g('material')[key])
 
         shape_transform = fdent(f'''\
             <transform name="to_world">
@@ -426,7 +426,7 @@ def render_nlos_scene(config_path, args):
                 exr_path = os.path.join(partial_results_dir,
                                         f'{experiment_name}_{render_name}.exr')
                 png_path = os.path.join(steady_dir,
-                                        f'{experiment_name}_{render_name}.png')
+                                        f'{experiment_name}_{render_name}')
                 logfile = None
                 if args.do_logging and not args.dry_run:
                     logfile = open(os.path.join(
@@ -438,7 +438,18 @@ def render_nlos_scene(config_path, args):
                 if not args.dry_run:
                     image = read_mitsuba_bitmap(exr_path)
                     image = tonemap_ldr(image)
-                    write_img(png_path, image)
+                    # Polarized case
+                    if image.shape[2] == 16:
+                        #print(image.shape)
+                        write_img(f"{png_path}.png", image[:, :, [0,1,2]])
+                        write_img(f"{png_path}_alpha.png", image[:, :, [3]])
+                        write_img(f"{png_path}_s0.png", image[:, :, [4,5,6]])
+                        write_img(f"{png_path}_s1.png", image[:, :, [7,8,9]])
+                        write_img(f"{png_path}_s2.png", image[:,:,[10,11,12]])
+                        write_img(f"{png_path}_s3.png", image[:,:,[13,14,15]])
+                    # Normal case
+                    else:
+                        write_img(f"{png_path}.png", image)
 
             render_steady('back_view', 0)
             render_steady('front_view', 1)

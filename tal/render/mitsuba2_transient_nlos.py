@@ -72,6 +72,7 @@ def run_mitsuba(scene_xml_path, exr_path, defines,
     # execute mitsuba command (sourcing setpath.sh before)
     num_threads = args.threads
     command = ['mitsuba',
+               '-m', 'scalar_rgb_polarized',
                '-o', exr_path,
                '-s', str(sensor_index),
                '-t', str(num_threads)]
