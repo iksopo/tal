@@ -208,19 +208,21 @@ def read_mitsuba_streakbitmap(path: str, exr_format='scalar_rgb'):
             streak_img[i_xtframe] = np.nan_to_num(other, nan=0.)
             pbar.update(1)
     if exr_format == 'scalar_rgb':
-        # for now streak_img has dimensions (y, x, time, channels)
+        # for now streak_img has dimensions (y, x, time, channels), where channels can have alpha
+        if streak_img.shape[-1] == 4:
+            streak_img = streak_img[:, :, :, 0:3]
         assert streak_img.shape[-1] == 3, \
             f'Careful, streak_img has shape {streak_img.shape} (i.e. its probably not RGB as we assume, last dimension should be 3)'
         # and we want it as (time, x, y, c)
-        Hc = np.transpose(streak_img, axis=[2, 1, 0, 3])
+        Hc = np.transpose(streak_img, axes=[2, 1, 0, 3])
         # and we want it as (time, x, y)
         H = np.sum(Hc, axis=3)
     elif exr_format == 'scalar_rgb_polarized':
         # for now streak_img has dimensions (y, x, time, channels + stokes)
-        assert streak_img.shape[-1] == 16, \
+        assert streak_img.shape[-1] == 15, \
             f'Careful, streak_img has shape {streak_img.shape} (i.e. its probably not RGB + Stokes as we assume, last dimension should be 16)'
         # and we want it as (time, x, y, c)
-        Hc = np.transpose(streak_img, axis=[2, 1, 0, 3])
+        Hc = np.transpose(streak_img, axes=[2, 1, 0, 3])
         # and we want it as (time, x, y)
         H = np.sum(Hc[:, :, :, 0:3], axis=3)
     return H, Hc

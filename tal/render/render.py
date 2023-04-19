@@ -168,7 +168,6 @@ def get_scene_xml(config, random_seed=0, quiet=False):
             <film type="streakhdrfilm" name="streakfilm">
                 <integer name="width" value="{v('sensor_width')}"/>
                 <integer name="height" value="{v('sensor_height')}"/>
-                <string name="pixel_format" value="rgb"/>
                 <string name="component_format" value="float32"/>
 
                 <integer name="num_bins" value="{v('num_bins')}"/>
@@ -183,6 +182,7 @@ def get_scene_xml(config, random_seed=0, quiet=False):
             </film>
         </sensor>''')
 
+    # <!-- <string name="pixel_format" value="rgb"/> -->
     materials = get_materials()
     shapes_steady = []
     shapes_nlos = []
@@ -324,7 +324,8 @@ def render_nlos_scene(config_path, args):
     mode = scene_config['mitsuba_variant']
     check_available_mode(mode)
     if not args.dry_run:
-        mitsuba_set_variant(mode)
+        # Does not matter since render from cmd
+        mitsuba_set_variant('scalar_rgb')
     steady_xml, nlos_xml = get_scene_xml(
         scene_config, random_seed=args.seed, quiet=args.quiet)
 
@@ -439,18 +440,18 @@ def render_nlos_scene(config_path, args):
                     logfile.close()
                 if not args.dry_run:
                     image = read_mitsuba_bitmap(exr_path)
-                    image = tonemap_ldr(image)
                     # Polarized case
                     if mode == 'scalar_rgb_polarized':
                         print(image.shape)
-                        write_img(f"{png_path}.png", image[:, :, [0,1,2]])
+                        write_img(f"{png_path}.png", tonemap_ldr(image[:, :, [0,1,2]]))
                         write_img(f"{png_path}_alpha.png", image[:, :, [3]])
-                        write_img(f"{png_path}_s0.png", image[:, :, [4,5,6]])
-                        write_img(f"{png_path}_s1.png", image[:, :, [7,8,9]])
-                        write_img(f"{png_path}_s2.png", image[:,:,[10,11,12]])
-                        write_img(f"{png_path}_s3.png", image[:,:,[13,14,15]])
+                        write_img(f"{png_path}_s0.png", tonemap_ldr(image[:, :, [4,5,6]]))
+                        write_img(f"{png_path}_s1.png", tonemap_ldr(image[:, :, [7,8,9]]))
+                        write_img(f"{png_path}_s2.png", tonemap_ldr(image[:,:,[10,11,12]]))
+                        write_img(f"{png_path}_s3.png", tonemap_ldr(image[:,:,[13,14,15]]))
                     # Normal case
                     elif mode == 'scalar_rgb':
+                        image = tonemap_ldr(image)
                         write_img(f"{png_path}.png", image)
 
 
