@@ -449,19 +449,17 @@ def render_nlos_scene(config_path, args):
                     logfile.close()
                 if not args.dry_run:
                     image = read_mitsuba_bitmap(exr_path)
-                    image = tonemap_ldr(image)
                     # Polarized case
                     if mode == 'scalar_rgb_polarized':
                         print(image.shape)
                         write_img(f"{png_path}.png", image[:, :, [0,1,2]])
-                        write_img(f"{png_path}_alpha.png", image[:, :, [3]])
-                        write_img(f"{png_path}_s0.png", image[:, :, [4,5,6]])
-                        write_img(f"{png_path}_s1.png", image[:, :, [7,8,9]])
-                        write_img(f"{png_path}_s2.png", image[:,:,[10,11,12]])
-                        write_img(f"{png_path}_s3.png", image[:,:,[13,14,15]])
+                        write_img(f"{png_path}_s0.png", tonemap_ldr(image[:, :, [3,4,5]]))
+                        write_img(f"{png_path}_s1.png", tonemap_ldr(image[:, :, [6,7,8]]))
+                        write_img(f"{png_path}_s2.png", tonemap_ldr(image[:,:,[9,10,11]]))
+                        write_img(f"{png_path}_s3.png", tonemap_ldr(image[:,:,[12,13,14]]))
                     # Normal case
                     elif mode == 'scalar_rgb':
-                        write_img(f"{png_path}.png", image)
+                        write_img(f"{png_path}.png", tonemap_ldr(image))
 
 
             render_steady('back_view', 0)
