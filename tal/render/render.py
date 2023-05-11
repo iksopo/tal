@@ -9,8 +9,7 @@ from tal.util import fdent, write_img, tonemap_ldr
 from tal.render.mitsuba2_transient_nlos import (
     get_material_keys, get_materials,
     read_mitsuba_streakbitmap, read_mitsuba_bitmap,
-    run_mitsuba, mitsuba_set_variant,
-    check_available_mode
+    run_mitsuba, mitsuba_set_variant
 )
 from tal.config import local_file_path
 import datetime
@@ -148,6 +147,21 @@ def get_scene_xml(config, random_seed=0, quiet=False):
     elif v('scan_type') != 'single' and v('scan_type') != 'exhaustive':
         raise AssertionError(
             'scan_type should be one of {single|confocal|exhaustive}')
+    
+    if v('projector')['type'] not in ['projector', 'polarizedprojector']:
+        raise AssertionError('projector should be one of {projector|polarizedprojector} but found ' + v('projector')['type'])
+    projector_nlos = fdent(f'''\
+        <emitter type="projector">
+            <rgb name="irradiance" value="1.0, 1.0, 1.0"/>
+            <float name="fov" value="{0.2 if v('integrator_nlos_laser_sampling') else 2}"/>
+        </emitter>
+        ''') if v('projector')['type'] == 'projector' else fdent(f'''\
+        <emitter type="polarizedprojector">
+            <rgb name="irradiance" value="1.0, 1.0, 1.0"/>
+            <float name="fov" value="{0.2 if v('integrator_nlos_laser_sampling') else 2}"/>
+            <float name="theta" value="{0 if 'theta' not in v('projector') else v('projector')['theta']}"/>
+        </emitter>
+        ''')
     sensor_nlos = fdent(f'''\
         <sensor type="nloscapturemeter">
             <sampler type="independent">
@@ -155,10 +169,7 @@ def get_scene_xml(config, random_seed=0, quiet=False):
                 <integer name="seed" value="{random_seed}"/>
             </sampler>
 
-            <emitter type="projector">
-                <rgb name="irradiance" value="1.0, 1.0, 1.0"/>
-                <float name="fov" value="{0.2 if v('integrator_nlos_laser_sampling') else 2}"/>
-            </emitter>
+            {projector_nlos}
 
             <boolean name="confocal" value="{confocal_capture}"/>
             <boolean name="account_first_and_last_bounces" value="{v('account_first_and_last_bounces')}"/>
@@ -322,9 +333,8 @@ def render_nlos_scene(config_path, args):
             f'Invalid YAML format in TAL config file: {exc}') from exc
     scene_config = {**scene_defaults, **scene_config}
     mode = scene_config['mitsuba_variant']
-    check_available_mode(mode)
     if not args.dry_run:
-        mitsuba_set_variant(mode)
+        mitsuba_set_variant('scalar_rgb')
     steady_xml, nlos_xml = get_scene_xml(
         scene_config, random_seed=args.seed, quiet=args.quiet)
 

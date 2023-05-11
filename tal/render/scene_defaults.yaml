@@ -37,6 +37,12 @@ laser_lookat_y: null
 laser_width: 32
 laser_height: 32
 
+# if polarized: type=polarizedprojector
+# Add theta parameter, default=0
+projector:
+  type: projector
+
+
 ##
 # Geometry (valid for hidden geometry or relay wall)
 ##
