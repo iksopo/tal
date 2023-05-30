@@ -92,3 +92,37 @@ def txy_interactive(data: _Data, cmap: str = 'hot', slice_axis: str = 't'):
     """
     from tal.plot.xy import plot_txy_interactive
     return plot_txy_interactive(data, cmap, slice_axis)
+
+
+def xy_interactive_stokes(data: _Data, cmap: str = 'hot',
+                          normalize: bool = False, local_frame_color: bool = False):
+    """ See txy_interactive. Shortcut with slice_axis='t' """
+    from tal.plot.xy import plot_txy_interactive
+    return txy_interactive_stokes(data, cmap, 't', normalize=normalize,
+                                        local_frame_color=local_frame_color)
+
+
+def tx_interactive_stokes(data: _Data, cmap: str = 'hot',
+                          normalize: bool = False, local_frame_color: bool = False):
+    """ See txy_interactive. Shortcut with slice_axis='y' """
+    from tal.plot.xy import plot_txy_interactive
+    return txy_interactive_stokes(data, cmap, 'y', normalize=normalize,
+                                        local_frame_color=local_frame_color)
+
+
+def ty_interactive_stokes(data: _Data, cmap: str = 'hot',
+                          normalize: bool = False, local_frame_color: bool = False):
+    """ See txy_interactive. Shortcut with slice_axis='x' """
+    from tal.plot.xy import plot_txy_interactive
+    return txy_interactive_stokes(data, cmap, 'x', normalize=normalize,
+                                        local_frame_color=local_frame_color)
+
+def txy_interactive_stokes(data: _Data, cmap: str = 'hot', slice_axis: str = 't',
+                           normalize: bool = False, local_frame_color: bool = False):
+    """
+    For 3D data, plot a 2D slice of the data with the given slice_axis fixed.
+    User can interactively change the slice position.
+    """
+    from tal.plot.xy import plot_txy_interactive_stokes
+    return plot_txy_interactive_stokes(data, cmap, slice_axis, normalize=normalize,
+                                        local_frame_color=local_frame_color)
