@@ -148,20 +148,34 @@ def get_scene_xml(config, random_seed=0, quiet=False):
         raise AssertionError(
             'scan_type should be one of {single|confocal|exhaustive}')
     
-    if v('projector')['type'] not in ['projector', 'polarizedprojector']:
-        raise AssertionError('projector should be one of {projector|polarizedprojector} but found ' + v('projector')['type'])
-    projector_nlos = fdent(f'''\
-        <emitter type="projector">
-            <rgb name="irradiance" value="1.0, 1.0, 1.0"/>
-            <float name="fov" value="{0.2 if v('integrator_nlos_laser_sampling') else 2}"/>
-        </emitter>
-        ''') if v('projector')['type'] == 'projector' else fdent(f'''\
+    if v('projector')['type'] not in ['projector', 'polarizedprojector', 'circularpolarizedprojector']:
+        raise AssertionError('projector should be one of {projector|polarizedprojector|circularpolarizedprojector} but found ' + v('projector')['type'])
+    if v('projector')['type'] == 'projector':
+        projector_nlos = fdent(f'''\
+            <emitter type="projector">
+                <rgb name="irradiance" value="1.0, 1.0, 1.0"/>
+                <float name="fov" value="{0.2 if v('integrator_nlos_laser_sampling') else 2}"/>
+            </emitter>
+            ''')
+    elif v('projector')['type'] == 'polarizedprojector':
+        projector_nlos = fdent(f'''\
         <emitter type="polarizedprojector">
             <rgb name="irradiance" value="1.0, 1.0, 1.0"/>
             <float name="fov" value="{0.2 if v('integrator_nlos_laser_sampling') else 2}"/>
             <float name="theta" value="{0 if 'theta' not in v('projector') else v('projector')['theta']}"/>
         </emitter>
         ''')
+    elif v('projector')['type'] == 'circularpolarizedprojector':
+        projector_nlos = fdent(f'''\
+        <emitter type="circularpolarizedprojector">
+            <rgb name="irradiance" value="1.0, 1.0, 1.0"/>
+            <float name="fov" value="{0.2 if v('integrator_nlos_laser_sampling') else 2}"/>
+            <float name="direction" value="{1 if 'direction' not in v('projector') else v('projector')['direction']}"/>
+        </emitter>
+        ''')
+    else:
+        raise AssertionError('Logic error, should have not reached here')
+
     sensor_nlos = fdent(f'''\
         <sensor type="nloscapturemeter">
             <sampler type="independent">
@@ -451,15 +465,21 @@ def render_nlos_scene(config_path, args):
                     image = read_mitsuba_bitmap(exr_path)
                     # Polarized case
                     if mode == 'scalar_rgb_polarized':
-                        print(image.shape)
                         write_img(f"{png_path}.png", image[:, :, [0,1,2]])
-                        write_img(f"{png_path}_s0.png", tonemap_ldr(image[:, :, [3,4,5]]))
-                        write_img(f"{png_path}_s1.png", tonemap_ldr(image[:, :, [6,7,8]]))
+                        write_img(f"{png_path}_s0.png", tonemap_ldr(image[:,:,[3,4,5]]))
+                        write_img(f"{png_path}_s1.png", tonemap_ldr(image[:,:,[6,7,8]]))
                         write_img(f"{png_path}_s2.png", tonemap_ldr(image[:,:,[9,10,11]]))
                         write_img(f"{png_path}_s3.png", tonemap_ldr(image[:,:,[12,13,14]]))
                     # Normal case
                     elif mode == 'scalar_rgb':
                         write_img(f"{png_path}.png", tonemap_ldr(image))
+                    elif mode == 'scalar_mono_polarized':
+                        write_img(f"{png_path}.png", tonemap_ldr(image[:,:,3]))
+                        write_img(f"{png_path}_s1.png", tonemap_ldr(image[:,:,6]))
+                        write_img(f"{png_path}_s2.png", tonemap_ldr(image[:,:,9]))
+                        write_img(f"{png_path}_s3.png", tonemap_ldr(image[:,:,12]))
+                    else:
+                        raise AssertionError(f'Mode {mode} not supported.')
 
 
             render_steady('back_view', 0)
