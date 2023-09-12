@@ -2,6 +2,7 @@ import argparse
 import os
 from tal import __version__ as tal_version
 from tal.util import fdent
+import numpy as np
 
 
 class SmartFormatter(argparse.HelpFormatter):
@@ -77,7 +78,7 @@ def main():
                                dest='keep_partial_results', action='store_false',
                                help='Remove the "partial" folder which stores temporal data after creating the final hdf5 file (e.g. multiple experiments for confocal/exhaustive)')
 
-    # render commands
+    # plot commands
     plot_parser = subparsers.add_parser(
         'plot', help='Plot capture data using one of the configured methods', formatter_class=SmartFormatter)
     plot_func_names, plot_func_param_names, plot_func_param_data = get_plot_functions()
@@ -86,6 +87,7 @@ def main():
                                         {v}''', v='\n'.join(plot_func_names)))
     plot_parser.add_argument('capture_files', nargs='*',
                              help='One or more paths to capture files')
+    
     for var_name, var_type in plot_func_param_data:
         plot_parser.add_argument(
             '--{}'.format(var_name.replace('_', '-')), type=var_type, required=False)
@@ -118,7 +120,8 @@ def main():
         for capture_file in args.capture_files:
             print(f'Reading {capture_file}...')
             labels.append(capture_file)
-            data.append(read_capture(capture_file))
+            cData = read_capture(capture_file)
+            data.append(cData)
         if len(data) == 1:
             data = data[0]
         if 'labels' in plot_func_param_names[command]:
