@@ -246,11 +246,14 @@ def plot_txy_interactive_stokes(data: Union[NLOSCaptureData, NLOSCaptureData.HTy
 	assert isinstance(data, NLOSCaptureData), 'Data must have NLOSCaptureData format to visualize Stokes'
 	assert data.Hc_format == HcFormat.T_Sx_Sy_C, \
 		'plot_txy_interactive does not support this data format'
-	txyc = np.empty((data.Hc.shape[0], data.Hc.shape[1], data.Hc.shape[2], 4))
-	txyc[:,:,:,0] = np.sum(data.Hc[:,:,:,3:6], axis=3)
-	txyc[:,:,:,1] = np.sum(data.Hc[:,:,:,6:9], axis=3)
-	txyc[:,:,:,2] = np.sum(data.Hc[:,:,:,9:12], axis=3)
-	txyc[:,:,:,3] = np.sum(data.Hc[:,:,:,12:15], axis=3)
+	if data.Hc.shape[3] == 4:
+		txyc = data.Hc
+	else:
+		txyc = np.empty((data.Hc.shape[0], data.Hc.shape[1], data.Hc.shape[2], 4))
+		txyc[:,:,:,0] = np.sum(data.Hc[:,:,:,3:6], axis=3)
+		txyc[:,:,:,1] = np.sum(data.Hc[:,:,:,6:9], axis=3)
+		txyc[:,:,:,2] = np.sum(data.Hc[:,:,:,9:12], axis=3)
+		txyc[:,:,:,3] = np.sum(data.Hc[:,:,:,12:15], axis=3)
 	delta_t = data.delta_t
 	t_start = data.t_start
 
