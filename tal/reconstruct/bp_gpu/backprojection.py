@@ -8,7 +8,7 @@ def backproject(H_0, laser_grid_xyz, sensor_grid_xyz, volume_xyz,
 	# TODO(oscar): Using torchscript but it works as fast as without it just due to GPU and tensorization
 	assert H_0.ndim == 2 and laser_grid_xyz.size == 3, \
 		'backproject only supports one laser point'
-	assert not camera_system.is_transient(), "Only confocal camera system is implemented"
+	assert not camera_system.is_transient(), "Transient camera system is not implemented"
 
 	nt, ns = H_0.shape
 	assert sensor_grid_xyz.shape[0] == ns, 'H does not match with sensor_grid_xyz'

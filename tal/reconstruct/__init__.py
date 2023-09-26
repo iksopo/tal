@@ -13,7 +13,11 @@ e.g. backprojection (tal.reconstruct.bp), phasor fields (tal.reconstruct.pf and 
 each of those contains a solve function that takes the captured data and returns the reconstructed volume.
 """
 
-from tal.reconstruct import bp, bp_gpu, fbp, pf, pf_dev
+from tal.reconstruct import bp, fbp, pf, pf_dev
+try:
+    from tal.reconstruct import bp_gpu
+except:
+    print("Torch is not installed for bp in GPU.")
 
 from tal.io.capture_data import NLOSCaptureData
 from tal.enums import HFormat
