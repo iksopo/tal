@@ -1,7 +1,7 @@
 import numpy as np
 import gc
 
-from tal.config import get_memory_usage, get_resources
+from tal.config import get_resources
 from tqdm import tqdm
 import concurrent.futures
 import multiprocessing as mp

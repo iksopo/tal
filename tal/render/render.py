@@ -544,7 +544,12 @@ def render_nlos_scene(config_path, args):
             'config': scene_config,
             'args': vars(args),
         }
-
+        channels = {
+            'scalar_rgb': 3,
+            'scalar_rgb_polarized': 15,
+            'scalar_mono_polarized': 4
+        }
+        nc = channels[mode]
         if scan_type == 'single':
             print(*laser_lookats[0])
             capture_data.H, capture_data.Hc = read_mitsuba_streakbitmap(
@@ -557,11 +562,18 @@ def render_nlos_scene(config_path, args):
                     (num_bins, laser_width, laser_height,
                      sensor_width, sensor_height),
                     dtype=np.float32)
+                capture_data.Hc = np.empty(
+                    (num_bins, laser_width, laser_height,
+                     sensor_width, sensor_height, nc),
+                    dtype=np.float32)
                 capture_data.H_format = HFormat.T_Lx_Ly_Sx_Sy
                 capture_data.Hc_format = HcFormat.T_Lx_Ly_Sx_Sy_C
             elif scan_type == 'confocal':
                 capture_data.H = np.empty(
                     (num_bins, laser_width, laser_height),
+                    dtype=np.float32)
+                capture_data.Hc = np.empty(
+                    (num_bins, laser_width, laser_height, nc),
                     dtype=np.float32)
                 capture_data.H_format = HFormat.T_Sx_Sy
                 capture_data.Hc_format = HcFormat.T_Sx_Sy_C
