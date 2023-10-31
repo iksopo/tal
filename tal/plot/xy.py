@@ -245,7 +245,7 @@ def plot_txy_interactive_stokes(data: Union[NLOSCaptureData, NLOSCaptureData.HTy
 	assert hasattr(data, 'Hc'), 'Data must have a per-channel output to visualize Stokes!'
 	assert isinstance(data, NLOSCaptureData), 'Data must have NLOSCaptureData format to visualize Stokes'
 	assert data.Hc_format == HcFormat.T_Sx_Sy_C, \
-		'plot_txy_interactive does not support this data format'
+		'plot_txy_interactive_stokes does not support this data format'
 	if data.Hc.shape[3] == 4:
 		txyc = data.Hc
 	else:

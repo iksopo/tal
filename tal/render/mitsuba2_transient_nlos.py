@@ -215,7 +215,7 @@ def read_mitsuba_streakbitmap(path: str, exr_format='scalar_rgb'):
         # and we want it as (time, x, y, c)
         Hc = np.transpose(streak_img, axes=[2, 1, 0, 3])
         # and we want it as (time, x, y)
-        H = np.sum(Hc[:, :, :, 0:3], axis=3)
+        H = np.sum(Hc[:, :, :, 3:6], axis=3)
     elif exr_format == 'scalar_mono_polarized':
         assert streak_img.shape[-1] == 15, \
             f'Careful, streak_img has shape {streak_img.shape} (i.e. its probably not mono + Stokes,  last dimension should be 15 due to mitsuba way)'
