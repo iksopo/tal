@@ -1,6 +1,3 @@
-# pyright: reportMissingImports=false
-
-
 def _get_setpath_location():
     from tal.config import ask_for_config, Config
     import os
@@ -21,7 +18,7 @@ def _get_setpath_location():
 
 
 try:
-    import mitsuba
+    import mitsuba  # pyright: reportMissingImports=false
 except ModuleNotFoundError:
     import sys
     import subprocess
@@ -37,40 +34,9 @@ except ModuleNotFoundError:
                 sys.path.append(directory)
 
 
-def get_name():
-    return 'mitsuba2-transient-nlos'
-
-
-def get_version():
-    return '2.2.1'
-
-
-def set_variant(s):
+def mitsuba_set_variant(s):
     import mitsuba
-    if not s.startswith('scalar_'):
-        raise AssertionError(
-            f'Variant {s} is not supported. It must start with "scalar_"')
     mitsuba.set_variant(s)
-
-
-def get_hdr_extension():
-    return 'exr'
-
-
-def convert_hdr_to_ldr(hdr_path, ldr_path):
-    from tal.util import write_img, tonemap_ldr
-    image = _read_mitsuba_bitmap(hdr_path)
-    image = tonemap_ldr(image)
-    write_img(ldr_path, image)
-
-
-def partial_laser_path(partial_results_dir, experiment_name, lx, ly):
-    import os
-    return os.path.join(partial_results_dir, f'{experiment_name}_L[{lx}][{ly}]'.replace('.', '_')), True
-
-
-def read_transient_image(path):
-    return _read_mitsuba_streakbitmap(path)
 
 
 def get_material_keys(s):
@@ -95,292 +61,8 @@ def get_materials():
         'custom': '$text'
     }
 
-def get_scene_xml(config, random_seed=0, quiet=False):
-    import os
-    import tal
-    from tal.util import fdent
 
-    def s(value):
-        if isinstance(value, bool):
-            return str(value).lower()
-        else:
-            return value
-
-    def v(key):
-        return s(config[key])
-
-    # integrator
-    integrator_steady = fdent(f'''\
-        <integrator type="path"/>''')
-
-    integrator_nlos = fdent(f'''\
-        <integrator type="transientpath">
-            <integer name="block_size" value="1"/>
-            <integer name="max_depth" value="{v('integrator_max_depth')}"/>
-            <integer name="filter_depth" value="{v('integrator_filter_depth')}"/>
-            <boolean name="discard_direct_paths" value="{v('integrator_discard_direct_paths')}"/>
-            <boolean name="nlos_laser_sampling" value="{v('integrator_nlos_laser_sampling')}"/>
-            <boolean name="nlos_hidden_geometry_sampling" value="{v('integrator_nlos_hidden_geometry_sampling')}"/>
-            <boolean name="nlos_hidden_geometry_sampling_do_rroulette" value="{v('integrator_nlos_hidden_geometry_sampling_do_rroulette')}"/>
-            <boolean name="nlos_hidden_geometry_sampling_includes_relay_wall" value="{v('integrator_nlos_hidden_geometry_sampling_includes_relay_wall')}"/>
-        </integrator>''')
-
-    if 'polarized' in v('mitsuba_variant'):
-        def add_stokes(s, itype):
-            return fdent('''\
-                <integrator type="{itype}">
-                    {s}
-                </integrator>''', itype=itype, s=s)
-        integrator_steady = add_stokes(integrator_steady, 'stokes')
-        integrator_nlos = add_stokes(integrator_nlos, 'transientstokes')
-
-    # relay wall
-    geometry_names = list(map(lambda g: g['name'], v('geometry')))
-    assert len(geometry_names) == len(set(geometry_names)), \
-        'One or more geometry names is duplicated'
-    relay_wall_name = v('relay_wall')
-    assert relay_wall_name in geometry_names, \
-        f'Relay wall is set to {relay_wall_name}, but must be one of {geometry_names}'
-
-    dummy_lights_and_geometry_steady = fdent(f'''\
-        <!-- Colored spheres to mark the laser and sensor positions -->
-        <shape type="sphere">
-            <point name="center" x="{v('sensor_x')}" y="{v('sensor_y')}" z="{v('sensor_z')}"/>
-            <float name="radius" value="0.05"/>
-            <bsdf type="diffuse" id="red">
-                <rgb name="reflectance" value="1.0, 0.0, 0.0"/>
-            </bsdf>
-        </shape>
-        <shape type="sphere">
-            <point name="center" x="{v('laser_x')}" y="{v('laser_y')}" z="{v('laser_z')}"/>
-            <float name="radius" value="0.05"/>
-            <bsdf type="diffuse" id="blue">
-                <rgb name="reflectance" value="0.0, 0.0, 1.0"/>
-            </bsdf>
-        </shape>
-
-        <!-- Illuminate all the scene -->
-        <emitter type="point">
-            <rgb name="intensity" value="1.0, 1.0, 1.0"/>
-            <point name="position" x="30" y="0" z="30"/>
-        </emitter>
-        <emitter type="point">
-            <rgb name="intensity" value="1.0, 1.0, 1.0"/>
-            <point name="position" x="-30" y="0" z="30"/>
-        </emitter>
-        <emitter type="point">
-            <rgb name="intensity" value="1.0, 1.0, 1.0"/>
-            <point name="position" x="0" y="30" z="30"/>
-        </emitter>
-        <emitter type="point">
-            <rgb name="intensity" value="1.0, 1.0, 1.0"/>
-            <point name="position" x="0" y="-30" z="30"/>
-        </emitter>''')
-
-    sensors_steady = fdent(f'''\
-        <!-- Sensor 0: back view -->
-        <sensor type="perspective">
-            <string name="fov_axis" value="smaller"/>
-            <float name="near_clip" value="0.01"/>
-            <float name="far_clip" value="1000"/>
-            <float name="fov" value="30"/>
-            <transform name="to_world">
-                <lookat origin="0, 0, 5"
-                        target="0, 0, 0"
-                            up="0, 1, 0"/>
-            </transform>
-            <sampler type="independent">
-                <integer name="sample_count" value="512"/>
-                <integer name="seed" value="{random_seed}"/>
-            </sampler>
-            <film type="hdrfilm">
-                <integer name="width" value="512"/>
-                <integer name="height" value="512"/>
-                <rfilter name="rfilter" type="gaussian"/>
-                <boolean name="high_quality_edges" value="false"/>
-            </film>
-        </sensor>
-
-        <!-- Sensor 1: side view -->
-        <sensor type="perspective">
-            <string name="fov_axis" value="smaller"/>
-            <float name="near_clip" value="0.01"/>
-            <float name="far_clip" value="1000"/>
-            <float name="fov" value="45"/>
-            <transform name="to_world">
-                <lookat origin="5, 0, 1.5"
-                        target="0, 0, 1.5"
-                            up="0, 1, 0"/>
-            </transform>
-            <sampler type="independent">
-                <integer name="sample_count" value="512"/>
-            </sampler>
-            <film type="hdrfilm">
-                <integer name="width" value="512"/>
-                <integer name="height" value="512"/>
-                <rfilter name="rfilter" type="gaussian"/>
-                <boolean name="high_quality_edges" value="false"/>
-            </film>
-        </sensor>''')
-
-    confocal_capture = 'false'
-    if v('scan_type') == 'confocal':
-        confocal_capture = 'true'
-    elif v('scan_type') != 'single' and v('scan_type') != 'exhaustive':
-        raise AssertionError(
-            'scan_type should be one of {single|confocal|exhaustive}')
-    sensor_nlos = fdent(f'''\
-        <sensor type="nloscapturemeter">
-            <sampler type="independent">
-                <integer name="sample_count" value="{v('sample_count')}"/>
-                <integer name="seed" value="{random_seed}"/>
-            </sampler>
-
-            <emitter type="projector">
-                <rgb name="irradiance" value="1.0, 1.0, 1.0"/>
-                <float name="fov" value="{0.2 if v('integrator_nlos_laser_sampling') else 2}"/>
-            </emitter>
-
-            <boolean name="confocal" value="{confocal_capture}"/>
-            <boolean name="account_first_and_last_bounces" value="{v('account_first_and_last_bounces')}"/>
-            <point name="sensor_origin" x="{v('sensor_x')}" y="{v('sensor_y')}" z="{v('sensor_z')}"/>
-            <point name="laser_origin" x="{v('laser_x')}" y="{v('laser_y')}" z="{v('laser_z')}"/>
-            <point name="laser_lookat_pixel" x="$laser_lookat_x" y="$laser_lookat_y" z="0"/>
-            <film type="streakhdrfilm" name="streakfilm">
-                <integer name="width" value="{v('sensor_width')}"/>
-                <integer name="height" value="{v('sensor_height')}"/>
-                <string name="pixel_format" value="rgb"/>
-                <string name="component_format" value="float32"/>
-
-                <integer name="num_bins" value="{v('num_bins')}"/>
-                <boolean name="auto_detect_bins" value="{v('auto_detect_bins')}"/>
-                <float name="bin_width_opl" value="{v('bin_width_opl')}"/>
-                <float name="start_opl" value="{v('start_opl')}"/>
-
-                <rfilter name="rfilter" type="box"/>
-                <!-- NOTE: tfilters are not implemented yet -->
-                <!-- <rfilter name="tfilter" type="box"/>  -->
-                <boolean name="high_quality_edges" value="false"/>
-            </film>
-        </sensor>''')
-
-    materials = get_materials()
-    shapes_steady = []
-    shapes_nlos = []
-    for gdict in v('geometry'):
-        def g(key):
-            return s(gdict.get(key, None))
-
-        name = g('name')
-        is_relay_wall = name == relay_wall_name
-        if is_relay_wall and g('mesh')['type'] != 'rectangle' and not quiet:
-            print('WARNING: Relay wall does not work well with meshes that are '
-                  'not of type "rectangle" because of wrong UV mapping. '
-                  'Please make sure that you know what you are doing')
-        shape_name = f'<!-- {name}{" (RELAY WALL)" if is_relay_wall else ""} -->'
-        description = g('description')
-        if description is not None and len(description.strip()) > 0:
-            shape_name = fdent('''\
-                {shape_name}
-                <!--
-                    {description}
-                -->''', shape_name=shape_name, description=description.strip())
-
-        material_id = g('material')['id']
-        assert material_id in materials.keys(), \
-            f'Geometry {name} has material {material_id}, but it must be one of {", ".join(materials.keys())}'
-        shape_material = materials[material_id]
-        material_keys = get_material_keys(shape_material)
-        for key in material_keys:
-            assert key in g('material'), \
-                f'Material {material_id} for geometry {name} must have a value for {key}'
-            shape_material = shape_material.replace(
-                f'${key}', g('material')[key])
-
-        shape_transform = fdent(f'''\
-            <transform name="to_world">
-                <scale x="{g('scale') or 1.0}" y="{g('scale') or 1.0}" z="{g('scale') or 1.0}"/>
-                <rotate x="1" angle="{g('rot_degrees_x') or 0.0}"/>
-                <rotate y="1" angle="{g('rot_degrees_y') or 0.0}"/>
-                <rotate z="1" angle="{g('rot_degrees_z') or 0.0}"/>
-                <translate x="{g('displacement_x') or 0.0}" y="{g('displacement_y') or 0.0}" z="{g('displacement_z') or 0.0}"/>
-            </transform>''')
-
-        shape_contents_steady = f'{shape_material}\n{shape_transform}'
-        newline = '\n'
-        shape_contents_nlos = f'{shape_material}\n{shape_transform}{f"{newline}{sensor_nlos}" if is_relay_wall else ""}'
-
-        if g('mesh')['type'] == 'obj':
-            assert 'filename' in g('mesh'), \
-                f'Missing mesh filename for geometry "{name}". ' \
-                f'It is required because its mesh type is set as OBJ.'
-            filename = g('mesh')['filename']
-            assert os.path.isfile(filename), \
-                f'{filename} does not exist for geometry "{name}"'
-
-            def shapify(content, filename):
-                return fdent('''\
-                {shape_name}
-                <shape type="obj">
-                    <string name="filename" value="{filename}"/>
-
-                    {content}
-                </shape>''', shape_name=shape_name, filename=filename, content=content)
-
-            shapes_steady.append(shapify(shape_contents_steady, filename))
-            shapes_nlos.append(shapify(shape_contents_nlos, filename))
-        elif g('mesh')['type'] == 'rectangle' or g('mesh')['type'] == 'sphere':
-            def shapify(content):
-                return fdent('''\
-                {shape_name}
-                <shape type="{shape_type}">
-                    {content}
-                </shape>''', shape_name=shape_name, content=content,
-                             shape_type=g('mesh')['type'])
-
-            shapes_steady.append(shapify(shape_contents_steady))
-            shapes_nlos.append(shapify(shape_contents_nlos))
-        else:
-            raise AssertionError(
-                f'Shape not yet supported: {g("mesh")["type"]}')
-
-    shapes_steady = '\n\n'.join(shapes_steady)
-    shapes_nlos = '\n\n'.join(shapes_nlos)
-
-    file_steady = fdent('''\
-        <!-- Auto-generated using TAL v{tal_version} -->
-        <scene version="{mitsuba_version}">
-            {integrator_steady}
-
-            {dummy_lights_and_geometry_steady}
-
-            {shapes_steady}
-
-            {sensors_steady}
-        </scene>''',
-                        tal_version=tal.__version__,
-                        mitsuba_version=get_version(),
-                        integrator_steady=integrator_steady,
-                        dummy_lights_and_geometry_steady=dummy_lights_and_geometry_steady,
-                        shapes_steady=shapes_steady,
-                        sensors_steady=sensors_steady)
-
-    file_nlos = fdent('''\
-        <!-- Auto-generated using TAL v{tal_version} -->
-        <scene version="{mitsuba_version}">
-            {integrator_nlos}
-
-            {shapes_nlos}
-        </scene>''',
-                      tal_version=tal.__version__,
-                      mitsuba_version=get_version(),
-                      integrator_nlos=integrator_nlos,
-                      shapes_nlos=shapes_nlos)
-
-    return file_steady, file_nlos
-
-
-def run_mitsuba(scene_xml_path, mode, hdr_path, defines,
+def run_mitsuba(scene_xml_path, mode, exr_path, defines,
                 experiment_name, logfile, args, sensor_index=0):
     import re
     import time
@@ -391,7 +73,7 @@ def run_mitsuba(scene_xml_path, mode, hdr_path, defines,
     num_threads = args.threads
     command = ['mitsuba',
                '-m', mode,
-               '-o', hdr_path,
+               '-o', exr_path,
                '-s', str(sensor_index),
                '-t', str(num_threads)]
     for key, value in defines.items():
@@ -473,22 +155,22 @@ def run_mitsuba(scene_xml_path, mode, hdr_path, defines,
     mitsuba_process.communicate()
     assert mitsuba_process.returncode == 0, \
         f'Mitsuba returned with error code {mitsuba_process.returncode}'
-    if os.path.isdir(hdr_path):
+    if os.path.isdir(exr_path):
         # assume transient render
-        n_exr_frames = len(os.listdir(hdr_path))
+        n_exr_frames = len(os.listdir(exr_path))
         assert n_exr_frames > 0, 'No frames were rendered?'
     else:
         # assume steady state render
-        assert os.path.isfile(hdr_path), 'No frames were rendered?'
+        assert os.path.isfile(exr_path), 'No frames were rendered?'
 
 
-def _read_mitsuba_bitmap(path: str):
+def read_mitsuba_bitmap(path: str):
     from mitsuba.core import Bitmap
     import numpy as np
     return np.array(Bitmap(path), copy=False)
 
 
-def _read_mitsuba_streakbitmap(path: str, exr_format='RGB'):
+def read_mitsuba_streakbitmap(path: str, exr_format='scalar_rgb'):
     """
     Reads all the images x-t that compose the streak image.
 
@@ -510,12 +192,12 @@ def _read_mitsuba_streakbitmap(path: str, exr_format='RGB'):
     xtframes = sorted(xtframes,
                       key=lambda x: int(re.compile(r'\d+').findall(x)[-1]))
     number_of_xtframes = len(xtframes)
-    first_img = _read_mitsuba_bitmap(xtframes[0])
+    first_img = read_mitsuba_bitmap(xtframes[0])
     streak_img = np.empty(
         (number_of_xtframes, *first_img.shape), dtype=first_img.dtype)
     with tqdm(desc=f'Reading {path}', total=number_of_xtframes, ascii=True) as pbar:
         for i_xtframe in range(number_of_xtframes):
-            other = _read_mitsuba_bitmap(xtframes[i_xtframe])
+            other = read_mitsuba_bitmap(xtframes[i_xtframe])
             streak_img[i_xtframe] = np.nan_to_num(other, nan=0.)
             pbar.update(1)
     if exr_format == 'scalar_rgb':

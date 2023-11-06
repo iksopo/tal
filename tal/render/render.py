@@ -2,6 +2,7 @@ import os
 import shutil
 import yaml
 import tal
+from tal import __version__ as tal_version
 from tal.io.capture_data import NLOSCaptureData
 from tal.enums import FileFormat, GridFormat, HFormat, HcFormat
 from tal.util import fdent, write_img, tonemap_ldr
@@ -319,9 +320,6 @@ def get_scene_xml(config, random_seed=0, quiet=False):
 
     return file_steady, file_nlos
 
-from tal.render.util import import_mitsuba_backend
-mitsuba_backend = import_mitsuba_backend()
-
 
 def render_nlos_scene(config_path, args):
     config_path = os.path.abspath(config_path)
@@ -350,8 +348,8 @@ def render_nlos_scene(config_path, args):
     scene_config = {**scene_defaults, **scene_config}
     mode = scene_config['mitsuba_variant']
     if not args.dry_run:
-        mitsuba_backend.set_variant(scene_config['mitsuba_variant'])
-    steady_xml, nlos_xml = mitsuba_backend.get_scene_xml(
+        mitsuba_set_variant('scalar_rgb')
+    steady_xml, nlos_xml = get_scene_xml(
         scene_config, random_seed=args.seed, quiet=args.quiet)
 
     try:
@@ -451,33 +449,51 @@ def render_nlos_scene(config_path, args):
             def render_steady(render_name, sensor_index):
                 if not args.quiet:
                     print(f'{render_name} for {experiment_name} steady render...')
-                hdr_ext = mitsuba_backend.get_hdr_extension()
-                hdr_path = os.path.join(partial_results_dir,
-                                        f'{experiment_name}_{render_name}.{hdr_ext}')
-                ldr_path = os.path.join(steady_dir,
-                                        f'{experiment_name}_{render_name}.png')
+                exr_path = os.path.join(partial_results_dir,
+                                        f'{experiment_name}_{render_name}.exr')
+                png_path = os.path.join(steady_dir,
+                                        f'{experiment_name}_{render_name}')
                 logfile = None
                 if args.do_logging and not args.dry_run:
                     logfile = open(os.path.join(
                         log_dir, f'{experiment_name}_{render_name}.log'), 'w')
-                mitsuba_backend.run_mitsuba(steady_scene_xml, hdr_path, dict(),
-                                            render_name, logfile, args, sensor_index)
+                run_mitsuba(steady_scene_xml, mode, exr_path, dict(),
+                            render_name, logfile, args, sensor_index)
                 if args.do_logging and not args.dry_run:
                     logfile.close()
                 if not args.dry_run:
-                    mitsuba_backend.convert_hdr_to_ldr(hdr_path, ldr_path)
+                    image = read_mitsuba_bitmap(exr_path)
+                    # Polarized case
+                    if mode == 'scalar_rgb_polarized':
+                        write_img(f"{png_path}.png", image[:, :, [0,1,2]])
+                        write_img(f"{png_path}_s0.png", tonemap_ldr(image[:,:,[3,4,5]]))
+                        write_img(f"{png_path}_s1.png", tonemap_ldr(image[:,:,[6,7,8]]))
+                        write_img(f"{png_path}_s2.png", tonemap_ldr(image[:,:,[9,10,11]]))
+                        write_img(f"{png_path}_s3.png", tonemap_ldr(image[:,:,[12,13,14]]))
+                    # Normal case
+                    elif mode == 'scalar_rgb':
+                        write_img(f"{png_path}.png", tonemap_ldr(image))
+                    elif mode == 'scalar_mono_polarized':
+                        write_img(f"{png_path}.png", tonemap_ldr(image[:,:,3]))
+                        write_img(f"{png_path}_s1.png", tonemap_ldr(image[:,:,6]))
+                        write_img(f"{png_path}_s2.png", tonemap_ldr(image[:,:,9]))
+                        write_img(f"{png_path}_s3.png", tonemap_ldr(image[:,:,12]))
+                    else:
+                        raise AssertionError(f'Mode {mode} not supported.')
+
 
             render_steady('back_view', 0)
             render_steady('front_view', 1)
+
+        def partial_laser_dir(lx, ly):
+            return os.path.join(partial_results_dir, f'{experiment_name}_L[{lx}][{ly}]'.replace('.', '_'))
 
         for i, (laser_lookat_x, laser_lookat_y) in tqdm(
                 enumerate(laser_lookats), desc=f'Rendering {experiment_name} ({scan_type})...',
                 ascii=True, total=len(laser_lookats)):
             try:
-                hdr_path, is_dir = mitsuba_backend.partial_laser_path(
-                    partial_results_dir, experiment_name, laser_lookat_x, laser_lookat_y)
-                if is_dir:
-                    os.mkdir(hdr_path)
+                exr_dir = partial_laser_dir(laser_lookat_x, laser_lookat_y)
+                os.mkdir(exr_dir)
             except OSError as exc:
                 raise AssertionError(f'Invalid permissions: {exc}') from exc
             defines = {
@@ -489,8 +505,8 @@ def render_nlos_scene(config_path, args):
                 logfile = open(os.path.join(
                     log_dir,
                     f'{experiment_name}_L[{laser_lookat_x}][{laser_lookat_y}].log'), 'w')
-            mitsuba_backend.run_mitsuba(nlos_scene_xml, hdr_path, defines,
-                                        f'Laser {i + 1} of {len(laser_lookats)}', logfile, args)
+            run_mitsuba(nlos_scene_xml, mode, exr_dir, defines,
+                        f'Laser {i + 1} of {len(laser_lookats)}', logfile, args)
             if args.do_logging and not args.dry_run:
                 logfile.close()
 
@@ -524,7 +540,7 @@ def render_nlos_scene(config_path, args):
         capture_data.t_accounts_first_and_last_bounces = \
             scene_config['account_first_and_last_bounces']
         capture_data.scene_info = {
-            'tal_version': tal.__version__,
+            'tal_version': tal_version,
             'config': scene_config,
             'args': vars(args),
         }
@@ -535,11 +551,9 @@ def render_nlos_scene(config_path, args):
         }
         nc = channels[mode]
         if scan_type == 'single':
-            hdr_path, _ = mitsuba_backend.partial_laser_path(
-                partial_results_dir,
-                experiment_name,
-                *laser_lookats[0])
-            capture_data.H = mitsuba_backend.read_transient_image(hdr_path)
+            print(*laser_lookats[0])
+            capture_data.H, capture_data.Hc = read_mitsuba_streakbitmap(
+                partial_laser_dir(*laser_lookats[0]), exr_format=mode)
             capture_data.H_format = HFormat.T_Sx_Sy
             capture_data.Hc_format = HcFormat.T_Sx_Sy_C
         elif scan_type == 'exhaustive' or scan_type == 'confocal':
@@ -568,12 +582,10 @@ def render_nlos_scene(config_path, args):
 
             for x in range(laser_width):
                 for y in range(laser_height):
-                    hdr_path, _ = mitsuba_backend.partial_laser_path(
-                        partial_results_dir,
-                        experiment_name,
-                        x + 0.5, y + 0.5)
-                    capture_data.H[:, x, y, ...] = np.squeeze(
-                        mitsuba_backend.read_transient_image(hdr_path))
+                    partial_H, partial_Hc = read_mitsuba_streakbitmap(
+                            partial_laser_dir(x + 0.5, y + 0.5), exr_format=mode)
+                    capture_data.H[:, x, y, ...] = np.squeeze(partial_H)
+                    capture_data.Hc[:, x, y, ...] = np.squeeze(partial_Hc)
         else:
             raise AssertionError(
                 'Invalid scan_type, must be one of {single|exhaustive|confocal}')
