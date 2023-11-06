@@ -45,6 +45,10 @@ def main():
     subparsers = parser.add_subparsers(
         help='Command', required=True, dest='command')
 
+    # config commands
+    config_parser = subparsers.add_parser(
+        'config', help='Edit the TAL configuration file')
+
     # render commands
     render_parser = subparsers.add_parser(
         'render', help='Create, edit or execute renders of simulated NLOS scene data captures', formatter_class=SmartFormatter)
@@ -94,7 +98,24 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == 'render':
+    if args.command == 'config':
+        from tal.config import get_config_filename
+        print('TAL configuration file is located at {l}'.format(
+            l=get_config_filename()))
+        print('Updating render backend configuration...')
+        from tal.config import ask_for_config, Config
+        version = ask_for_config(Config.MITSUBA_VERSION, force_ask=True)
+        if version == '2':
+            ask_for_config(
+                Config.MITSUBA2_TRANSIENT_NLOS_FOLDER, force_ask=True)
+        elif version == '3':
+            ask_for_config(
+                Config.MITSUBA3_TRANSIENT_NLOS_FOLDER, force_ask=True)
+        else:
+            raise AssertionError(
+                f'Invalid MITSUBA_VERSION={version}, must be one of (2, 3)')
+        print('Done.')
+    elif args.command == 'render':
         config_file = args.config_file
         assert len(config_file) != 1 or config_file[0] != 'new', \
             'You must specify a folder name: tal render new <new_folder_name>'
